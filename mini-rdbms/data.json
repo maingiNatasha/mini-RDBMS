@@ -1,0 +1,46 @@
+{
+  "tables": {
+    "users": {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INT",
+          "length": null,
+          "primaryKey": true,
+          "unique": false
+        },
+        {
+          "name": "email",
+          "type": "VARCHAR",
+          "length": 100,
+          "primaryKey": false,
+          "unique": false
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR",
+          "length": 50,
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "primaryKey": "id",
+      "uniqueColumns": [
+        "id"
+      ],
+      "rows": [
+        {
+          "id": 1,
+          "email": "mainginatasha@gmail.com",
+          "username": "Natasha"
+        },
+        {
+          "id": 2,
+          "email": "tasha@gmail.com",
+          "username": "Tasha"
+        }
+      ]
+    }
+  }
+}
