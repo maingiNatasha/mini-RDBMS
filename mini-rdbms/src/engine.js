@@ -25,13 +25,15 @@ function execute(sql) {
         }
 
         case "SELECT": {
-            const rows = db.selectRows(ast.tableName, ast.columns);
-
-            if (rows.length === 0) {
-                return "(0 rows)";
-            }
-
+            const rows = db.selectRows(ast.tableName, ast.columns, ast.where);
+            if (rows.length === 0) return "(0 rows)";
             return rows;
+        }
+
+        case "UPDATE": {
+            const affected = db.updateRows(ast.tableName, ast.assignments, ast.where);
+            db.saveToDisk();
+            return `${affected} row(s) updated in '${ast.tableName}'`;
         }
 
         default:

@@ -144,14 +144,25 @@ function parseInsert(cleaned) {
 }
 
 function parseSelect(cleaned) {
-    // Check syntax eg: SELECT (id, name) FROM users; / SELECT * FROM users;
-    const selectRegex = /^SELECT\s+(.+)\s+FROM\s+(\w+)\s*;?$/i;
+    // Supports:
+    // SELECT * FROM users;
+    // SELECT id, email FROM users;
+    // SELECT * FROM users WHERE id = 1;
+    const selectRegex = /^SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(\w+)\s*=\s*(.+?))?\s*;?$/i;
     const match = cleaned.match(selectRegex);
 
     if (!match) return null;
 
     const columnsPart = match[1].trim();
     const tableName = match[2];
+
+    const whereCol = match[3] ? match[3].trim() : null;
+    let whereVal = match[4] ? match[4].trim() : null;
+
+    // If value captured includes a trailing semicolon, strip it
+    if (whereVal && whereVal.endsWith(";")) {
+        whereVal = whereVal.slice(0, -1).trim();
+    }
 
     // Retrieve columns
     let columns;
@@ -162,13 +173,49 @@ function parseSelect(cleaned) {
         columns = columnsPart.split(",").map(col => col.trim());
     }
 
+    const where = whereCol ? { column: whereCol, value: whereVal } : null;
+
     return {
         type: "SELECT",
         tableName,
-        columns
+        columns,
+        where
     };
 }
 
+function parseUpdate(cleaned) {
+    // Supports:
+    // UPDATE users SET name = 'Natasha' WHERE id = 1;
+    // UPDATE users SET email = 'natasha@yahoo.com', name = 'Tash' WHERE id = 2;
+    const updateRegex = /^UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(\w+)\s*=\s*(.+?)\s*;?$/i;
+
+    const match = cleaned.match(updateRegex);
+    if (!match) return null;
+
+    const tableName = match[1];
+    const setPart = match[2].trim();
+    const whereCol = match[3].trim();
+    let whereVal = match[4].trim();
+
+    // If value captured includes a trailing semicolon, strip it
+    if (whereVal && whereVal.endsWith(";")) {
+        whereVal = whereVal.slice(0, -1).trim();
+    }
+
+    // Split SET clause
+    const assignments = splitCSV(setPart).map((piece) => {
+        const m = piece.match(/^(\w+)\s*=\s*(.+)$/);
+        if (!m) throw new Error("Invalid SET clause");
+        return { column: m[1].trim(), value: m[2].trim() };
+    });
+
+    return {
+        type: "UPDATE",
+        tableName,
+        assignments, // [{column, value}, ...]
+        where: { column: whereCol, value: whereVal },
+    };
+}
 
 function parse(sql) {
     const cleaned = sql.trim();
@@ -181,6 +228,9 @@ function parse(sql) {
 
     const selectAST = parseSelect(cleaned);
     if (selectAST) return selectAST;
+
+    const updateAST = parseUpdate(cleaned);
+    if (updateAST) return updateAST;
 
     throw new Error("Invalid or unsupported SQL syntax");
 }

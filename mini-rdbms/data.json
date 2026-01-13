@@ -15,7 +15,7 @@
           "type": "VARCHAR",
           "length": 100,
           "primaryKey": false,
-          "unique": false
+          "unique": true
         },
         {
           "name": "username",
@@ -27,18 +27,32 @@
       ],
       "primaryKey": "id",
       "uniqueColumns": [
+        "email",
         "id"
       ],
+      "indexedColumns": [
+        "email",
+        "id"
+      ],
+      "nextRowId": 4,
       "rows": [
         {
           "id": 1,
-          "email": "mainginatasha@gmail.com",
-          "username": "Natasha"
+          "email": "natasha@gmail.com",
+          "username": "Natasha",
+          "_rowId": 1
         },
         {
           "id": 2,
           "email": "tasha@gmail.com",
-          "username": "Tasha"
+          "username": "Tashy",
+          "_rowId": 2
+        },
+        {
+          "id": 3,
+          "email": "bmaingi@gmail.com",
+          "username": "bmaingi",
+          "_rowId": 3
         }
       ]
     }
