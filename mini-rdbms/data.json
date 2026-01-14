@@ -1,60 +1,69 @@
 {
-  "tables": {
-    "users": {
-      "name": "users",
-      "columns": [
-        {
-          "name": "id",
-          "type": "INT",
-          "length": null,
-          "primaryKey": true,
-          "unique": false
-        },
-        {
-          "name": "email",
-          "type": "VARCHAR",
-          "length": 100,
-          "primaryKey": false,
-          "unique": true
-        },
-        {
-          "name": "username",
-          "type": "VARCHAR",
-          "length": 50,
-          "primaryKey": false,
-          "unique": false
+  "version": 1,
+  "currentDbName": "test_db",
+  "databases": {
+    "test_db": {
+      "tables": {
+        "users": {
+          "name": "users",
+          "columns": [
+            {
+              "name": "id",
+              "type": "INT",
+              "length": null,
+              "primaryKey": true,
+              "unique": false
+            },
+            {
+              "name": "email",
+              "type": "VARCHAR",
+              "length": 100,
+              "primaryKey": false,
+              "unique": true
+            },
+            {
+              "name": "password",
+              "type": "VARCHAR",
+              "length": 50,
+              "primaryKey": false,
+              "unique": false
+            },
+            {
+              "name": "username",
+              "type": "VARCHAR",
+              "length": 50,
+              "primaryKey": false,
+              "unique": false
+            }
+          ],
+          "primaryKey": "id",
+          "uniqueColumns": [
+            "email",
+            "id"
+          ],
+          "indexedColumns": [
+            "email",
+            "id"
+          ],
+          "nextRowId": 4,
+          "rows": [
+            {
+              "id": 1,
+              "email": "natasha@gmail.com",
+              "password": "tashy",
+              "username": "Natasha",
+              "_rowId": 1
+            },
+            {
+              "id": 2,
+              "email": "tasha@gmail.com",
+              "password": "tash",
+              "username": "Tasha",
+              "_rowId": 2
+            }
+          ]
         }
-      ],
-      "primaryKey": "id",
-      "uniqueColumns": [
-        "email",
-        "id"
-      ],
-      "indexedColumns": [
-        "email",
-        "id"
-      ],
-      "nextRowId": 4,
-      "rows": [
-        {
-          "id": 1,
-          "email": "natasha@gmail.com",
-          "username": "Natasha",
-          "_rowId": 1
-        },
-        {
-          "id": 2,
-          "email": "tasha@gmail.com",
-          "username": "Tashy",
-          "_rowId": 2
-        },
-        {
-          "id": 3,
-          "email": "bmaingi@gmail.com",
-          "username": "bmaingi",
-          "_rowId": 3
-        }
-      ]
+      }
     }
   }
 }

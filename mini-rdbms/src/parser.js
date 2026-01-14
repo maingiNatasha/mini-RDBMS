@@ -56,9 +56,75 @@ function parseColumnType(typeToken) {
     return { baseType: token, length: null };
 }
 
+function parseWhere(wherePart) {
+    // Supports:
+    // "email = 'tasha@b.com' AND id = 1"
+    // "email = 'tasha@b.com' OR id = 1"
+    const trimmed = wherePart.trim();
+
+    // Detect operator type used
+    const hasAnd = /\s+AND\s+/i.test(trimmed);
+    const hasOr  = /\s+OR\s+/i.test(trimmed);
+
+    if (hasAnd && hasOr) {
+        throw new Error("Mixed AND/OR without parentheses is not supported yet. " + "Stick to only ANDs or only ORs.");
+    }
+
+    // Retrieve operator and parts
+    const op = hasOr ? "OR" : (hasAnd ? "AND" : null);
+    const parts = op ? trimmed.split(new RegExp(`\\s+${op}\\s+`, "i")) : [trimmed];
+
+    const conditions = parts.map((part) => {
+        const m = part.trim().match(/^(\w+)\s*=\s*(.+)$/);
+        if (!m) throw new Error("Invalid WHERE clause");
+
+        return {
+            column: m[1].trim(),
+            value: m[2].trim()
+        };
+    });
+
+    return conditions.length === 1
+        ? conditions[0]
+        : { op, conditions };
+}
+
+function parseCreateDatabase(cleaned) {
+    // Supports:
+    // CREATE DATABASE test_db;
+    const createDBregex = /^CREATE\s+DATABASE\s+([A-Za-z_][A-Za-z0-9_]*);$/i;
+    const match = cleaned.match(createDBregex);
+
+    if (!match) return null;
+
+    const dbName = match[1];
+
+    return {
+        type: "CREATE_DATABASE",
+        dbName
+    }
+}
+
+function parseUseDatabase(cleaned) {
+    // Supports:
+    // USE test_db;
+    const useeDBregex = /^USE\s+([A-Za-z_][A-Za-z0-9_]*);$/i;
+    const match = cleaned.match(useeDBregex);
+
+    if (!match) return null;
+
+    const dbName = match[1];
+
+    return {
+        type: "USE_DATABASE",
+        dbName
+    }
+}
+
 function parseCreateTable(cleaned) {
-    // Check syntax eg: CREATE TABLE users (id INT, name TEXT);
-    const createTableregex = /^CREATE TABLE (\w+)\s*\((.+)\);?$/i;
+    // Supports:
+    // CREATE TABLE users (id INT, username TEXT);
+    const createTableregex = /^CREATE TABLE (\w+)\s*\((.+)\);$/i;
     const match = cleaned.match(createTableregex);
 
     if (!match) return null;
@@ -117,8 +183,9 @@ function parseCreateTable(cleaned) {
 }
 
 function parseInsert(cleaned) {
-    // Check syntax eg: INSERT INTO users (id, name) VALUES (1, 'Natasha');
-    const insertRegex = /^INSERT INTO (\w+)\s*\((.+)\)\s*VALUES\s*\((.+)\)\s*;?$/i;
+    // Supports:
+    // INSERT INTO users (id, username) VALUES (1, 'Natasha');
+    const insertRegex =  /^INSERT\s+INTO\s+(\w+)\s*\((.+?)\)\s*VALUES\s*\((.+?)\)\s*;\s*$/i;
     const match = cleaned.match(insertRegex);
 
     if (!match) return null;
@@ -148,21 +215,15 @@ function parseSelect(cleaned) {
     // SELECT * FROM users;
     // SELECT id, email FROM users;
     // SELECT * FROM users WHERE id = 1;
-    const selectRegex = /^SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(\w+)\s*=\s*(.+?))?\s*;?$/i;
+    // SELECT * FROM users WHERE id = 1 AND username = "Natasha";
+    const selectRegex = /^SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+?))?\s*;\s*$/i;
     const match = cleaned.match(selectRegex);
 
     if (!match) return null;
 
     const columnsPart = match[1].trim();
     const tableName = match[2];
-
-    const whereCol = match[3] ? match[3].trim() : null;
-    let whereVal = match[4] ? match[4].trim() : null;
-
-    // If value captured includes a trailing semicolon, strip it
-    if (whereVal && whereVal.endsWith(";")) {
-        whereVal = whereVal.slice(0, -1).trim();
-    }
+    const where = match[3] ? parseWhere(match[3].trim()) : null;
 
     // Retrieve columns
     let columns;
@@ -172,8 +233,6 @@ function parseSelect(cleaned) {
     } else {
         columns = columnsPart.split(",").map(col => col.trim());
     }
-
-    const where = whereCol ? { column: whereCol, value: whereVal } : null;
 
     return {
         type: "SELECT",
@@ -185,22 +244,17 @@ function parseSelect(cleaned) {
 
 function parseUpdate(cleaned) {
     // Supports:
-    // UPDATE users SET name = 'Natasha' WHERE id = 1;
-    // UPDATE users SET email = 'natasha@yahoo.com', name = 'Tash' WHERE id = 2;
-    const updateRegex = /^UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(\w+)\s*=\s*(.+?)\s*;?$/i;
+    // UPDATE users SET username = 'Natasha' WHERE id = 1;
+    // UPDATE users SET email = 'natasha@yahoo.com', username = 'Tash' WHERE id = 2;
+    // UPDATE users SET email = 'natasha@yahoo.com', username = 'Tash' WHERE id = 2 AND username = "Natasha";
+    const updateRegex = /^UPDATE\s+(\w+)\s+SET\s+(.+?)(?:\s+WHERE\s+(.+?))?\s*;\s*$/i;
 
     const match = cleaned.match(updateRegex);
     if (!match) return null;
 
     const tableName = match[1];
     const setPart = match[2].trim();
-    const whereCol = match[3].trim();
-    let whereVal = match[4].trim();
-
-    // If value captured includes a trailing semicolon, strip it
-    if (whereVal && whereVal.endsWith(";")) {
-        whereVal = whereVal.slice(0, -1).trim();
-    }
+    const where = match[3] ? parseWhere(match[3].trim()) : null;
 
     // Split SET clause
     const assignments = splitCSV(setPart).map((piece) => {
@@ -213,12 +267,37 @@ function parseUpdate(cleaned) {
         type: "UPDATE",
         tableName,
         assignments, // [{column, value}, ...]
-        where: { column: whereCol, value: whereVal },
+        where
     };
+}
+
+function parseDelete(cleaned) {
+    // Supports:
+    // DELETE FROM users WHERE id = 1;
+    // DELETE FROM users WHERE id = 2 AND username = "Tasha";
+    const deleteRegex = /^DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.+?)\s*;\s*$/i;
+
+    const match = cleaned.match(deleteRegex);
+    if (!match) return null;
+
+    const tableName = match[1];
+    const where = match[2] ? parseWhere(match[2].trim()) : null;
+
+    return {
+        type: "DELETE",
+        tableName,
+        where
+    }
 }
 
 function parse(sql) {
     const cleaned = sql.trim();
+
+    const createDatabaseAST = parseCreateDatabase(cleaned);
+    if (createDatabaseAST) return createDatabaseAST;
+
+    const useDatabaseAST = parseUseDatabase(cleaned);
+    if (useDatabaseAST) return useDatabaseAST;
 
     const createAST = parseCreateTable(cleaned);
     if (createAST) return createAST;
@@ -231,6 +310,9 @@ function parse(sql) {
 
     const updateAST = parseUpdate(cleaned);
     if (updateAST) return updateAST;
+
+    const deleteAST = parseDelete(cleaned);
+    if (deleteAST) return deleteAST;
 
     throw new Error("Invalid or unsupported SQL syntax");
 }

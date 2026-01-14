@@ -1,14 +1,7 @@
 /**
- * In-memory database state for the mini RDBMS.
- * Manages table schemas, row storage and constraints.
+ * Represents a single database.
+ * Owns tables, indexes, constraints, and CRUD logic.
  */
-
-const fs = require("node:fs");
-const path = require("node:path");
-
-// File for storing db data in json format
-const DATA_FILE = path.join(process.cwd(), "data.json");
-
 
 // Removes quotes from values
 function stripQuotes(value) {
@@ -58,8 +51,30 @@ function coerceValue(columnDef, rawValue) {
     throw new Error(`Unsupported column type '${type}'`);
 }
 
+// Handles set intersection
+function intersectSets(a, b) {
+    // Iterate the smaller set for speed
+    const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+
+    const out = new Set();
+    for (const x of small) {
+        if (large.has(x)) out.add(x);
+    }
+    return out;
+}
+
+// Handles set union
+function unionSets(out, s) {
+    for (const x of s) {
+        out.add(x);
+    }
+    return out;
+}
+
+
 class Database {
-    constructor() {
+    constructor(name) {
+        this.name = name
         this.tables = new Map();
     }
 
@@ -123,26 +138,67 @@ class Database {
     }
 
     _getMatchingRowIds(table, where, schemaByName) {
-        const { column, value } = where;
+        // Return all RowIds if there is no where clause
+        if (!where) return new Set(table.rowById.keys());
 
-        if (!schemaByName.has(column)) {
-            throw new Error(`Unknown column '${column}' in table '${table.name}'`);
+        // Step 1: Normalize input into: op + conditions[]
+        let op = null;
+        let conditions = null;
+
+        if (where.op === "AND" || where.op === "OR") {
+            op = where.op;
+            conditions = where.conditions;
+        } else {
+            conditions = [where];
         }
 
-        const coerced = coerceValue(schemaByName.get(column), value);
+        // Step 2: Convert each condition into a Set<rowId>
+        const sets = conditions.map(({ column, value }) => {
+            if (!schemaByName.has(column)) {
+                throw new Error(`Unknown column '${column}' in table '${table.name}'`);
+            }
 
-        // Use index if available
-        if (table.indexedColumns.has(column)) {
-            const index = table.indexes.get(column);
-            const set = index?.get(coerced);
-            return new Set(set ? Array.from(set) : []);
+            const coerced = coerceValue(schemaByName.get(column), value);
+
+            // Use index if available
+            if (table.indexedColumns.has(column)) {
+                const index = table.indexes.get(column);
+                const set = index?.get(coerced);
+                return new Set(set ? Array.from(set) : []);
+            }
+
+            // Fallback scan for this condition
+            const out = new Set();
+            for (const row of table.rows) {
+                const rowId = row._rowId;
+                if (row[column] === coerced) out.add(rowId);
+            }
+            return out;
+        });
+
+        // Step 3: Combine the sets
+        const totalRows = table.rowById.size;
+        if (sets.length === 0) return new Set(); // edge case
+
+        // OR = union (with early exit if we already have all rows)
+        if (op === "OR") {
+            const out = new Set();
+            for (const s of sets) {
+                unionSets(out, s);
+                if (out.size === totalRows) return out; // can't get bigger than all rows
+            }
+            return out;
         }
 
-        // Fallback scan
-        const out = new Set();
-        for (const row of table.rows) {
-            const rowId = row._rowId;
-            if (row[column] === coerced) out.add(rowId);
+        // AND (default): sort sets smallest-first, early exit when empty
+        sets.sort((a, b) => a.size - b.size);
+
+        let out = sets[0];
+        if (out.size === 0) return out;
+
+        for (let i = 1; i < sets.length; i++) {
+            out = intersectSets(out, sets[i]);
+            if (out.size === 0) return out;
         }
         return out;
     }
@@ -298,32 +354,14 @@ class Database {
 
         // Apply WHERE col = value (optional)
         if (where) {
-            const { column, value } = where;
+            const rowIdSet = this._getMatchingRowIds(table, where, schemaByName);
 
-            if (!schemaByName.has(column)) {
-                throw new Error(`Unknown column '${column}' in table '${tableName}'`);
-            }
-
-            const colDef = schemaByName.get(column);
-            const coerced = coerceValue(colDef, value);
-
-            // If we have an index on this column, use it
-            if (table.indexedColumns.has(column)) {
-                const index = table.indexes.get(column);
-                const rowIdSet = index.get(coerced);
-
-                if (!rowIdSet || rowIdSet.size === 0) {
-                    rows = [];
-                } else {
-                    rows = Array.from(rowIdSet).map((rowId) => table.rowById.get(rowId));
-                }
-
-                console.log("[INDEX USED]", column);
+            if (rowIdSet.size === 0) {
+                rows = [];
             } else {
-                // Fallback scan
-                rows = rows.filter((row) => row[column] === coerced);
-
-                console.log("[FALLBACK SCAN USED]", column);
+                rows = Array.from(rowIdSet).map((rowId) =>
+                    table.rowById.get(rowId)
+                );
             }
         }
 
@@ -435,16 +473,70 @@ class Database {
         return updated;
     }
 
-    loadFromDisk(filepath = DATA_FILE) {
-        if (!fs.existsSync(filepath)) return false;
+    deleteRows(tableName, where) {
+        // Check if table exists
+        const table = this.getTable(tableName);
+        if (!table) {
+            throw new Error(`Table '${tableName}' does not exist`);
+        }
 
-        const raw = fs.readFileSync(filepath, "utf8");
-        const data = JSON.parse(raw);
+        // Build a schema lookup
+        const schemaByName = new Map(table.columns.map((column) => [column.name, column]));
 
-        this.tables = new Map();
+        // Find rows to delete that match the WHERE clause
+        const targetRowIds = this. _getMatchingRowIds(table, where, schemaByName);
+        if (targetRowIds.size === 0) return 0;
 
-        for (const [tableName, tableObj] of Object.entries(data.tables)) {
-            // Recreate the table object (schema + rows)
+        // Remove rows
+        for (const rowId of targetRowIds) {
+            const row = table.rowById.get(rowId);
+            if (!row) continue;
+
+            // Remove from indexes
+            for (const colName of table.indexedColumns) {
+                const val = row[colName];
+                if (val !== null && val !== undefined) {
+                    this._removeFromIndex(table, colName, val, rowId);
+                }
+            }
+
+            // Remove from rowById
+            table.rowById.delete(rowId);
+        }
+
+        // Remove from rows array
+        table.rows = table.rows.filter(row => !targetRowIds.has(row._rowId));
+
+        return targetRowIds.size;
+    }
+
+    toObject() {
+        // Serialize database to plain object
+        const tablesObj = {};
+
+        for (const [name, table] of this.tables.entries()) {
+            tablesObj[name] = {
+                name: table.name,
+                columns: table.columns,
+                primaryKey: table.primaryKey ?? null,
+                uniqueColumns: Array.from(table.uniqueColumns ?? []),
+                indexedColumns: Array.from(table.indexedColumns ?? []),
+                nextRowId: table.nextRowId ?? 1,
+                rows: table.rows ?? [],
+            };
+        }
+
+        return { tables: tablesObj };
+    }
+
+    static fromObject(dbName, data) {
+        // Rebuild database from plain object
+        const db = new Database(dbName);
+        db.tables = new Map();
+
+        const tablesData = data?.tables ?? {};
+
+        for (const [tableName, tableObj] of Object.entries(tablesData)) {
             const table = {
                 name: tableObj.name,
                 columns: tableObj.columns,
@@ -464,7 +556,12 @@ class Database {
                 }
             }
 
-            // Initialize index maps for indexed columns
+            // Optional: if you also auto-index PK, keep it consistent
+            if (table.primaryKey && !table.indexedColumns.has(table.primaryKey)) {
+                table.indexedColumns.add(table.primaryKey);
+            }
+
+            // Initialize index maps
             for (const colName of table.indexedColumns) {
                 table.indexes.set(colName, new Map());
             }
@@ -477,39 +574,16 @@ class Database {
                 }
             }
 
-            // Populate indexes from existing rows (single pass)
+            // Populate indexes from existing rows
             for (const [rowId, row] of table.rowById.entries()) {
-                this._indexRow(table, rowId, row);
+                db._indexRow(table, rowId, row);
             }
 
-            this.tables.set(tableName, table);
+            db.tables.set(tableName, table);
         }
 
-        return true;
+        return db;
     }
-
-    saveToDisk(filepath = DATA_FILE) {
-        const tablesObj = {};
-
-        for (const [name, table] of this.tables.entries()) {
-            tablesObj[name] = {
-                name: table.name,
-                columns: table.columns,
-                primaryKey: table.primaryKey,
-                uniqueColumns: Array.from(table.uniqueColumns ?? []),
-                indexedColumns: Array.from(table.indexedColumns ?? []),
-                nextRowId: table.nextRowId ?? 1,
-                rows: table.rows ?? [],
-            };
-
-        }
-
-        fs.writeFileSync(filepath, JSON.stringify({ tables: tablesObj }, null, 2), "utf8");
-    }
-
 }
 
-// Create a single database instance in memory
-const db = new Database();
-
-module.exports = { db };
+module.exports = { Database };

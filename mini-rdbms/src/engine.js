@@ -4,15 +4,25 @@
  */
 
 const { parse } = require("./parser");
-const { db } = require("./db");
+const { db } = require("./dbManager");
 
 function execute(sql) {
     // Parse SQL
     const ast = parse(sql);
-    console.log("AST:", ast);
+    // console.log("AST:", ast);
 
     // Carry out the command based on AST type
     switch (ast.type) {
+        case "CREATE_DATABASE":
+            db.createDatabase(ast.dbName);
+            db.saveToDisk();
+            return `Database '${ast.dbName}' created`;
+
+        case "USE_DATABASE":
+            db.useDatabase(ast.dbName);
+            db.saveToDisk();
+            return `Using database '${ast.dbName}'`;
+
         case "CREATE_TABLE":
             db.createTable(ast.tableName, ast.columns, ast.primaryKey);
             db.saveToDisk();
@@ -34,6 +44,12 @@ function execute(sql) {
             const affected = db.updateRows(ast.tableName, ast.assignments, ast.where);
             db.saveToDisk();
             return `${affected} row(s) updated in '${ast.tableName}'`;
+        }
+
+        case "DELETE": {
+            const affected = db.deleteRows(ast.tableName, ast.where);
+            db.saveToDisk();
+            return `${affected} row(s) deleted from '${ast.tableName}'`;
         }
 
         default:

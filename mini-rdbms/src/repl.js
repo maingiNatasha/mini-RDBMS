@@ -6,7 +6,7 @@
 // readline - Reads user input from the terminal; execute - runs SQL commands
 const readline = require("readline");
 const { execute } = require("./engine");
-const { db } = require("./db");
+const { db } = require("./dbManager");
 
 // Load stored database data
 const loaded = db.loadFromDisk();
