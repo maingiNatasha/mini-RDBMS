@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "currentDbName": "test_db",
+  "currentDbName": "demo",
   "databases": {
-    "test_db": {
+    "demo": {
       "tables": {
         "users": {
           "name": "users",
@@ -17,7 +17,7 @@
             {
               "name": "email",
               "type": "VARCHAR",
-              "length": 100,
+              "length": 50,
               "primaryKey": false,
               "unique": true
             },
@@ -38,21 +38,8 @@
             "email",
             "id"
           ],
-          "nextRowId": 3,
-          "rows": [
-            {
-              "id": 1,
-              "email": "natashamaingi@gmail.com",
-              "password": "defaultPass23",
-              "_rowId": 1
-            },
-            {
-              "id": 2,
-              "email": "tasha@gmail.com",
-              "password": "passw0RD",
-              "_rowId": 2
-            }
-          ]
+          "nextRowId": 1,
+          "rows": []
         },
         "tasks": {
           "name": "tasks",
@@ -86,45 +73,8 @@
           "indexedColumns": [
             "id"
           ],
-          "nextRowId": 7,
-          "rows": [
-            {
-              "id": 1,
-              "user_id": 1,
-              "title": "Write a journal entry",
-              "_rowId": 1
-            },
-            {
-              "id": 2,
-              "user_id": 1,
-              "title": "Fix some code bugs",
-              "_rowId": 2
-            },
-            {
-              "id": 3,
-              "user_id": 1,
-              "title": "Clean my room",
-              "_rowId": 3
-            },
-            {
-              "id": 4,
-              "user_id": 2,
-              "title": "Do some hiking",
-              "_rowId": 4
-            },
-            {
-              "id": 5,
-              "user_id": 2,
-              "title": "Complete spongebob sketch",
-              "_rowId": 5
-            },
-            {
-              "id": 6,
-              "user_id": 5,
-              "title": "Deep clean the house",
-              "_rowId": 6
-            }
-          ]
+          "nextRowId": 1,
+          "rows": []
         }
       }
     }
