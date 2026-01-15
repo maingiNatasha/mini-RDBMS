@@ -63,6 +63,10 @@ class DBManager {
         return this.currentDb.deleteRows(tableName, where);
     }
 
+    selectJoin(leftTable, rightTable, on, columns) {
+        return this.currentDb.selectJoin(leftTable, rightTable, on, columns)
+    }
+
     saveToDisk(filepath = DATA_FILE) {
         const databasesObj = {};
         for (const [dbName, db] of this.databases.entries()) {

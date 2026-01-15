@@ -52,6 +52,11 @@ function execute(sql) {
             return `${affected} row(s) deleted from '${ast.tableName}'`;
         }
 
+        case "SELECT_JOIN": {
+            const rows = db.selectJoin(ast.leftTable, ast.rightTable, ast.on, ast.columns);
+            return rows.length === 0 ? "(0 rows)" : rows;
+        }
+
         default:
             throw new Error("Unsupported command");
     }

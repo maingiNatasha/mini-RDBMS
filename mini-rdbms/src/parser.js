@@ -99,10 +99,7 @@ function parseCreateDatabase(cleaned) {
 
     const dbName = match[1];
 
-    return {
-        type: "CREATE_DATABASE",
-        dbName
-    }
+    return { type: "CREATE_DATABASE", dbName }
 }
 
 function parseUseDatabase(cleaned) {
@@ -115,70 +112,80 @@ function parseUseDatabase(cleaned) {
 
     const dbName = match[1];
 
-    return {
-        type: "USE_DATABASE",
-        dbName
-    }
+    return { type: "USE_DATABASE", dbName }
 }
 
 function parseCreateTable(cleaned) {
     // Supports:
-    // CREATE TABLE users (id INT, username TEXT);
-    const createTableregex = /^CREATE TABLE (\w+)\s*\((.+)\);$/i;
-    const match = cleaned.match(createTableregex);
+    // Inline PK: CREATE TABLE users (id INT PRIMARY KEY, username TEXT);
+    // Table-level PK: CREATE TABLE tasks (id INT, user_id INT, title TEXT) PRIMARY KEY (id);
+    const createTableRegex = /^CREATE\s+TABLE\s+(\w+)\s*\((.+?)\)\s*(?:PRIMARY\s+KEY\s*\((\w+)\))?\s*;\s*$/i;
 
+    const match = cleaned.match(createTableRegex);
     if (!match) return null;
 
-    const tableName = match[1]; // Retrieve table name
-    const columnsPart  = match[2]; // Retrieve columns part
+    const tableName = match[1];
+    const columnsPart = match[2];
+    const tableLevelPk = match[3] ?? null;
 
     let primaryKey = null;
 
-    const columns = columnsPart.split(",").map(colDef => {
+    const columns = columnsPart.split(",").map((colDef) => {
         const tokens = colDef.trim().split(/\s+/);
 
-        // Check if it contains atleast col name and col type
         if (tokens.length < 2) {
             throw new Error("Invalid column definition");
         }
 
-        // Retrieve column name and column type
         const name = tokens[0];
         const typeInfo = parseColumnType(tokens[1]);
 
-        // Convert tokens to upper case
-        const upperTokens = tokens.map(t => t.toUpperCase());
+        const upperTokens = tokens.map((t) => t.toUpperCase());
 
-        // PRIMARY KEY detection
-        const hasPrimaryKey = upperTokens.includes("PRIMARY") && upperTokens.includes("KEY") && upperTokens.indexOf("PRIMARY") + 1 === upperTokens.indexOf("KEY");
+        // Inline PRIMARY KEY detection: "id INT PRIMARY KEY"
+        const hasInlinePK = upperTokens.includes("PRIMARY") && upperTokens.includes("KEY") && upperTokens.indexOf("PRIMARY") + 1 === upperTokens.indexOf("KEY");
 
-        if (hasPrimaryKey) {
-            // Check if primary key already exists
+        if (hasInlinePK) {
             if (primaryKey && primaryKey !== name) {
                 throw new Error("Only one PRIMARY KEY is supported");
             }
-
             primaryKey = name;
         }
 
-        // UNIQUE detection
         const isUnique = upperTokens.includes("UNIQUE");
 
         return {
             name,
-            type: typeInfo.baseType, // "INT" | "TEXT" | "VARCHAR"
-            length: typeInfo.length, // number | null (only for VARCHAR)
-            primaryKey: hasPrimaryKey,
-            unique: isUnique
+            type: typeInfo.baseType,
+            length: typeInfo.length,
+            primaryKey: hasInlinePK,
+            unique: isUnique,
         };
     });
 
-    // Return AST
+    // Apply table-level PRIMARY KEY (if provided)
+    if (tableLevelPk) {
+        if (primaryKey && primaryKey !== tableLevelPk) {
+            throw new Error("Only one PRIMARY KEY is supported");
+        }
+
+        // Ensure PK column exists
+        const pkCol = columns.find((c) => c.name === tableLevelPk);
+        if (!pkCol) {
+            throw new Error(`PRIMARY KEY column '${tableLevelPk}' does not exist`);
+        }
+
+        primaryKey = tableLevelPk;
+
+        // Mark it as primaryKey on that column too (so your DB can treat it like inline)
+        pkCol.primaryKey = true;
+    }
+
     return {
         type: "CREATE_TABLE",
         tableName,
         columns,
-        primaryKey
+        primaryKey,
     };
 }
 
@@ -283,11 +290,41 @@ function parseDelete(cleaned) {
     const tableName = match[1];
     const where = match[2] ? parseWhere(match[2].trim()) : null;
 
-    return {
-        type: "DELETE",
-        tableName,
-        where
+    return { type: "DELETE", tableName, where };
+}
+
+function parseSelectJoin(cleaned) {
+    // Supports:
+    // SELECT * FROM users JOIN tasks ON users.id = tasks.user_id;
+    // SELECT users.email, tasks.title FROM users JOIN tasks ON users.id = tasks.user_id;
+    const selectJoinRegex = /^SELECT\s+(.+?)\s+FROM\s+(\w+)\s+JOIN\s+(\w+)\s+ON\s+(\w+)\.(\w+)\s*=\s*(\w+)\.(\w+)\s*;\s*$/i;
+
+    const match = cleaned.match(selectJoinRegex);
+    if (!match) return null;
+
+    const columnsPart = match[1].trim();
+    const leftTable = match[2];
+    const rightTable = match[3];
+    const left = { table: match[4], column: match[5] };
+    const right = { table: match[6], column: match[7] };
+
+    // Retrieve columns
+    let columns;
+
+    if (columnsPart === "*") {
+        columns = "*";
+    } else {
+        columns = columnsPart.split(",").map(col => col.trim());
     }
+
+    return {
+        type: "SELECT_JOIN",
+        columns,
+        leftTable,
+        rightTable,
+        on : { left, right }
+    };
+
 }
 
 function parse(sql) {
@@ -313,6 +350,9 @@ function parse(sql) {
 
     const deleteAST = parseDelete(cleaned);
     if (deleteAST) return deleteAST;
+
+    const joinAST = parseSelectJoin(cleaned);
+    if (joinAST) return joinAST;
 
     throw new Error("Invalid or unsupported SQL syntax");
 }

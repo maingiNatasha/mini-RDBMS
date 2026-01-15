@@ -27,13 +27,6 @@
               "length": 50,
               "primaryKey": false,
               "unique": false
-            },
-            {
-              "name": "username",
-              "type": "VARCHAR",
-              "length": 50,
-              "primaryKey": false,
-              "unique": false
             }
           ],
           "primaryKey": "id",
@@ -45,21 +38,91 @@
             "email",
             "id"
           ],
-          "nextRowId": 4,
+          "nextRowId": 3,
           "rows": [
             {
               "id": 1,
-              "email": "natasha@gmail.com",
-              "password": "tashy",
-              "username": "Natasha",
+              "email": "natashamaingi@gmail.com",
+              "password": "defaultPass23",
               "_rowId": 1
             },
             {
               "id": 2,
               "email": "tasha@gmail.com",
-              "password": "tash",
-              "username": "Tasha",
+              "password": "passw0RD",
               "_rowId": 2
+            }
+          ]
+        },
+        "tasks": {
+          "name": "tasks",
+          "columns": [
+            {
+              "name": "id",
+              "type": "INT",
+              "length": null,
+              "primaryKey": true,
+              "unique": false
+            },
+            {
+              "name": "user_id",
+              "type": "INT",
+              "length": null,
+              "primaryKey": false,
+              "unique": false
+            },
+            {
+              "name": "title",
+              "type": "TEXT",
+              "length": null,
+              "primaryKey": false,
+              "unique": false
+            }
+          ],
+          "primaryKey": "id",
+          "uniqueColumns": [
+            "id"
+          ],
+          "indexedColumns": [
+            "id"
+          ],
+          "nextRowId": 7,
+          "rows": [
+            {
+              "id": 1,
+              "user_id": 1,
+              "title": "Write a journal entry",
+              "_rowId": 1
+            },
+            {
+              "id": 2,
+              "user_id": 1,
+              "title": "Fix some code bugs",
+              "_rowId": 2
+            },
+            {
+              "id": 3,
+              "user_id": 1,
+              "title": "Clean my room",
+              "_rowId": 3
+            },
+            {
+              "id": 4,
+              "user_id": 2,
+              "title": "Do some hiking",
+              "_rowId": 4
+            },
+            {
+              "id": 5,
+              "user_id": 2,
+              "title": "Complete spongebob sketch",
+              "_rowId": 5
+            },
+            {
+              "id": 6,
+              "user_id": 5,
+              "title": "Deep clean the house",
+              "_rowId": 6
             }
           ]
         }

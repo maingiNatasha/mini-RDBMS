@@ -78,131 +78,6 @@ class Database {
         this.tables = new Map();
     }
 
-    _createIndexOnTable(table, colName) {
-        // Check if column exists in indexed columns
-        if (table.indexedColumns.has(colName)) return;
-
-        // Register column as indexed
-        table.indexedColumns.add(colName);
-        table.indexes.set(colName, new Map());
-    }
-
-    _indexRow(table, rowId, row) {
-        for (const colName of table.indexedColumns) {
-            // Check if row has indexed column
-            if (!(colName in row)) continue;
-
-            // Get value in that column
-            const val = row[colName];
-            if (val === null) continue;
-
-            // Get index map for column
-            const colIndex = table.indexes.get(colName);
-
-            // If it doesn't have a value, add val and create a set
-            if (!colIndex.has(val)) {
-                colIndex.set(val, new Set());
-            }
-
-            // Add row id in set
-            colIndex.get(val).add(rowId);
-        }
-    }
-
-    _removeFromIndex(table, colName, val, rowId) {
-        // Get column index
-        const colIndex = table.indexes.get(colName);
-        if (!colIndex) return;
-
-        // Get set for the specific value
-        const set = colIndex.get(val);
-        if (!set) return;
-
-        // Remove row id from set
-        set.delete(rowId);
-
-        // Clean up empty sets
-        if (set.size === 0) colIndex.delete(val);
-    }
-
-    _addToIndex(table, colName, val, rowId) {
-        // Get column index
-        const colIndex = table.indexes.get(colName);
-        if (!colIndex) return;
-
-        // Create set if val doesn't exist
-        if (!colIndex.has(val)) colIndex.set(val, new Set());
-
-        // Add row id to set
-        colIndex.get(val).add(rowId);
-    }
-
-    _getMatchingRowIds(table, where, schemaByName) {
-        // Return all RowIds if there is no where clause
-        if (!where) return new Set(table.rowById.keys());
-
-        // Step 1: Normalize input into: op + conditions[]
-        let op = null;
-        let conditions = null;
-
-        if (where.op === "AND" || where.op === "OR") {
-            op = where.op;
-            conditions = where.conditions;
-        } else {
-            conditions = [where];
-        }
-
-        // Step 2: Convert each condition into a Set<rowId>
-        const sets = conditions.map(({ column, value }) => {
-            if (!schemaByName.has(column)) {
-                throw new Error(`Unknown column '${column}' in table '${table.name}'`);
-            }
-
-            const coerced = coerceValue(schemaByName.get(column), value);
-
-            // Use index if available
-            if (table.indexedColumns.has(column)) {
-                const index = table.indexes.get(column);
-                const set = index?.get(coerced);
-                return new Set(set ? Array.from(set) : []);
-            }
-
-            // Fallback scan for this condition
-            const out = new Set();
-            for (const row of table.rows) {
-                const rowId = row._rowId;
-                if (row[column] === coerced) out.add(rowId);
-            }
-            return out;
-        });
-
-        // Step 3: Combine the sets
-        const totalRows = table.rowById.size;
-        if (sets.length === 0) return new Set(); // edge case
-
-        // OR = union (with early exit if we already have all rows)
-        if (op === "OR") {
-            const out = new Set();
-            for (const s of sets) {
-                unionSets(out, s);
-                if (out.size === totalRows) return out; // can't get bigger than all rows
-            }
-            return out;
-        }
-
-        // AND (default): sort sets smallest-first, early exit when empty
-        sets.sort((a, b) => a.size - b.size);
-
-        let out = sets[0];
-        if (out.size === 0) return out;
-
-        for (let i = 1; i < sets.length; i++) {
-            out = intersectSets(out, sets[i]);
-            if (out.size === 0) return out;
-        }
-        return out;
-    }
-
     createTable(name, columns, primaryKey = null) {
         // Check if table already exists
         if (this.tables.has(name)) {
@@ -277,24 +152,34 @@ class Database {
             }
         }
 
-        // Step 4: Build new row object (only provided columns for now)
+        // Step 4: Build new row object with default nulls for every column
         const newRow = {};
 
+        for (const col of table.columns) {
+            newRow[col.name] = null;
+        }
+
+        // Step 5: Fill only provided columns
         for (let i = 0; i < columnNames.length; i++) {
             const colName = columnNames[i];
             const colDef = schemaByName.get(colName);
             newRow[colName] = coerceValue(colDef, rawValues[i]);
         }
 
-        // Step 5: Constraint enforcement (PK + UNIQUE) using indexes
-        for (const uniqueCol of table.uniqueColumns) {
-            // If user didn’t provide a unique column, skip for now.
-            if (!(uniqueCol in newRow)) continue;
+        // Step 6: Primary Key check
+        if (table.primaryKey) {
+            const pkVal = newRow[table.primaryKey];
+            if (pkVal === null || pkVal === undefined) {
+                throw new Error(`PRIMARY KEY '${table.primaryKey}' cannot be NULL`);
+            }
+        }
 
+        // Step 7: Constraint enforcement (PK + UNIQUE) using indexes
+        for (const uniqueCol of table.uniqueColumns) {
             const incoming = newRow[uniqueCol];
 
             // Allow multiple NULLs for UNIQUE
-            if (incoming === null) continue;
+            if (incoming === null || incoming === undefined) continue;
 
             // Index must exist for unique columns (created at CREATE TABLE / rebuilt on load)
             const index = table.indexes.get(uniqueCol);
@@ -313,7 +198,7 @@ class Database {
             }
         }
 
-        // Step 6: Commit the row after passing checks
+        // Step 8: Commit the row after passing checks
         // Assign internal rid
         const rowId = table.nextRowId++;
         newRow._rowId = rowId;
@@ -423,14 +308,22 @@ class Database {
             for (const a of coercedAssignments) {
                 if (!isUniqueCol(a.column)) continue;
 
+                if (a.column === table.primaryKey && (a.value === null || a.value === undefined)) {
+                    throw new Error(`PRIMARY KEY '${a.column}' cannot be NULL`);
+                }
+
                 const incoming = a.value;
                 if (incoming === null) continue;
 
                 const index = table.indexes.get(a.column);
+                if (!index) {
+                    throw new Error(`Index missing for unique column '${a.column}'`);
+                }
+
                 const existingSet = index?.get(incoming);
 
                 if (existingSet && existingSet.size > 0) {
-                    // conflict only if some OTHER row already has this value
+                    // Conflict only if some OTHER row already has this value
                     const onlyMe = existingSet.size === 1 && existingSet.has(rowId);
 
                     if (!onlyMe) {
@@ -508,6 +401,229 @@ class Database {
         table.rows = table.rows.filter(row => !targetRowIds.has(row._rowId));
 
         return targetRowIds.size;
+    }
+
+    selectJoin(leftTableName, rightTableName, on, columns) {
+        // Check if tables exist
+        const leftTable = this.getTable(leftTableName);
+        const rightTable = this.getTable(rightTableName);
+
+        if (!leftTable) throw new Error(`Table '${leftTableName}' does not exist`);
+        if (!rightTable) throw new Error(`Table '${rightTableName}' does not exist`);
+
+        // Validate ON clause: ON clause must reference the actual table names (no aliases yet)
+        if (on.left.table !== leftTableName || on.right.table !== rightTableName) {
+            throw new Error(
+                `JOIN ON must reference '${leftTableName}' and '${rightTableName}' (aliases not supported yet)`
+            );
+        }
+
+        // Validate join columns exist
+        const leftCols = new Set(leftTable.columns.map(col => col.name));
+        const rightCols = new Set(rightTable.columns.map(col => col.name));
+
+        if (!leftCols.has(on.left.column)) {
+            throw new Error(`Unknown column '${on.left.column}' in table '${leftTableName}'`);
+        }
+        if (!rightCols.has(on.right.column)) {
+            throw new Error(`Unknown column '${on.right.column}' in table '${rightTableName}'`);
+        }
+
+        // Validate SELECT columns if not '*'
+        const selectingAll = columns === "*";
+        if (!selectingAll) {
+            for (const selectCol of columns) {
+                const match = selectCol.match(/^(\w+)\.(\w+)$/);
+                if (!match) {
+                    throw new Error(
+                        `Invalid SELECT column '${selectCol}'. Use '*' or fully qualified columns like '${leftTableName}.id'`
+                    );
+                }
+
+                const table = match[1];
+                const col = match[2];
+
+                if (table !== leftTableName && table !== rightTableName) {
+                    throw new Error(`Unknown table '${table}' in SELECT list`);
+                }
+                if (table === leftTableName && !leftCols.has(col)) {
+                    throw new Error(`Unknown column '${col}' in table '${leftTableName}'`);
+                }
+                if (table === rightTableName && !rightCols.has(col)) {
+                    throw new Error(`Unknown column '${col}' in table '${rightTableName}'`);
+                }
+            }
+        }
+
+        const out = [];
+
+        // Naive INNER JOIN (nested loop)
+        for (const leftRow of leftTable.rows) {
+            const leftVal = leftRow[on.left.column];
+            if (leftVal === null || leftVal === undefined) continue;
+
+            for (const rightRow of rightTable.rows) {
+                const rightVal = rightRow[on.right.column];
+                if (rightVal === null || rightVal === undefined) continue;
+
+                if (leftVal === rightVal) {
+                    if (selectingAll) {
+                        // SELECT * -> return qualified keys to avoid collisions
+                        const joined = {};
+
+                        for (const c of leftTable.columns) {
+                            joined[`${leftTableName}.${c.name}`] = leftRow[c.name];
+                        }
+                        for (const c of rightTable.columns) {
+                            joined[`${rightTableName}.${c.name}`] = rightRow[c.name];
+                        }
+
+                        out.push(joined);
+                    } else {
+                        // SELECT specific columns
+                        const projected = {};
+
+                        for (const selectCol of columns) {
+                            const [table, col] = selectCol.split(".");
+                            projected[selectCol] = (table === leftTableName) ? leftRow[col] : rightRow[col];
+                        }
+
+                        out.push(projected);
+                    }
+                }
+            }
+        }
+
+        return out;
+    }
+
+    _createIndexOnTable(table, colName) {
+        // Check if column exists in indexed columns
+        if (table.indexedColumns.has(colName)) return;
+
+        // Register column as indexed
+        table.indexedColumns.add(colName);
+        table.indexes.set(colName, new Map());
+    }
+
+    _indexRow(table, rowId, row) {
+        for (const colName of table.indexedColumns) {
+            // Get index map for column
+            const colIndex = table.indexes.get(colName);
+            if (!colIndex) continue;
+
+            // Get value in that column
+            const val = row[colName];
+            if (val === null || val === undefined) continue;
+
+            // If it doesn't have a value, add val and create a set
+            if (!colIndex.has(val)) {
+                colIndex.set(val, new Set());
+            }
+
+            // Add row id in set
+            colIndex.get(val).add(rowId);
+        }
+    }
+
+    _removeFromIndex(table, colName, val, rowId) {
+        // Skip null values
+        if (val === null || val === undefined) return;
+
+        // Get column index
+        const colIndex = table.indexes.get(colName);
+        if (!colIndex) return;
+
+        // Get set for the specific value
+        const set = colIndex.get(val);
+        if (!set) return;
+
+        // Remove row id from set
+        set.delete(rowId);
+
+        // Clean up empty sets
+        if (set.size === 0) colIndex.delete(val);
+    }
+
+    _addToIndex(table, colName, val, rowId) {
+        // Check value
+        if (val === null || val === undefined) return;
+
+        // Get column index
+        const colIndex = table.indexes.get(colName);
+        if (!colIndex) return;
+
+        // Create set if val doesn't exist
+        if (!colIndex.has(val)) colIndex.set(val, new Set());
+
+        // Add row id to set
+        colIndex.get(val).add(rowId);
+    }
+
+    _getMatchingRowIds(table, where, schemaByName) {
+        // Return all RowIds if there is no where clause
+        if (!where) return new Set(table.rowById.keys());
+
+        // Step 1: Normalize input into: op + conditions[]
+        let op = null;
+        let conditions = null;
+
+        if (where.op === "AND" || where.op === "OR") {
+            op = where.op;
+            conditions = where.conditions;
+        } else {
+            conditions = [where];
+        }
+
+        // Step 2: Convert each condition into a Set<rowId>
+        const sets = conditions.map(({ column, value }) => {
+            if (!schemaByName.has(column)) {
+                throw new Error(`Unknown column '${column}' in table '${table.name}'`);
+            }
+
+            const coerced = coerceValue(schemaByName.get(column), value);
+
+            // Use index if available
+            if (table.indexedColumns.has(column)) {
+                const index = table.indexes.get(column);
+                const set = index?.get(coerced);
+                return new Set(set ? Array.from(set) : []);
+            }
+
+            // Fallback scan for this condition
+            const out = new Set();
+            for (const row of table.rows) {
+                const rowId = row._rowId;
+                if (row[column] === coerced) out.add(rowId);
+            }
+            return out;
+        });
+
+        // Step 3: Combine the sets
+        const totalRows = table.rowById.size;
+        if (sets.length === 0) return new Set(); // edge case
+
+        // OR = union (with early exit if we already have all rows)
+        if (op === "OR") {
+            const out = new Set();
+            for (const s of sets) {
+                unionSets(out, s);
+                if (out.size === totalRows) return out; // can't get bigger than all rows
+            }
+            return out;
+        }
+
+        // AND (default): sort sets smallest-first, early exit when empty
+        sets.sort((a, b) => a.size - b.size);
+
+        let out = sets[0];
+        if (out.size === 0) return out;
+
+        for (let i = 1; i < sets.length; i++) {
+            out = intersectSets(out, sets[i]);
+            if (out.size === 0) return out;
+        }
+        return out;
     }
 
     toObject() {
