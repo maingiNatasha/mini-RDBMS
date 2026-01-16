@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node src/repl.js",
-    "web": "node src/web/server.js",
-    "web:dev": "nodemon src/web/server.js"
+    "start": "node rdbms/repl.js",
+    "web": "node backend/server.js",
+    "web:dev": "nodemon backend/server.js"
   },
   "keywords": [],
   "author": "",

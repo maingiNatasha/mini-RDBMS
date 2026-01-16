@@ -8,7 +8,7 @@ const path = require("node:path");
 const { Database } = require("./db");
 
 // File for storing db data in json format (pin to project root)
-const DATA_FILE = path.join(__dirname, "..", "..", "data.json");
+const DATA_FILE = path.join(__dirname, "..", "data.json");
 
 class DBManager {
     constructor() {
