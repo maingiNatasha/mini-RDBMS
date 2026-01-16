@@ -13,14 +13,22 @@ Requirements: Node.js (LTS recommended)
 npm install
 npm start
 # or
-node src/repl.js
+node rdbms/repl.js
 ```
 
 Exit the REPL with `exit` or `quit`.
 
+### Web API
+
+```bash
+npm run web
+```
+
+Server runs on `http://localhost:5000`.
+
 ---
 
-## Example session
+## Example REPL session
 
 ```sql
 CREATE DATABASE demo;
@@ -144,13 +152,54 @@ SELECT users.email, tasks.title FROM users JOIN tasks ON users.id = tasks.user_i
 
 ---
 
+## Web API
+
+Base URL: `http://localhost:5000/api`
+
+Auth:
+
+```http
+POST /auth/register
+{ "email": "a@b.com", "password": "secret" }
+```
+
+```http
+POST /auth/login
+{ "email": "a@b.com", "password": "secret" }
+```
+
+Tasks:
+
+```http
+GET /user/:id/tasks
+POST /task
+{ "user_id": 1, "title": "Write docs" }
+PUT /task/:id
+{ "title": "Update docs" }
+DELETE /task/:id
+```
+
+All responses follow the shape:
+
+```json
+{ "success": true, "message": "...", "data": {} }
+```
+
+---
+
 ## Project layout
 
-- `src/parser.js` parses SQL into an AST.
-- `src/engine.js` executes AST nodes against the DB manager.
-- `src/dbManager.js` manages multiple databases and persistence.
-- `src/db.js` implements tables, indexes, constraints, and CRUD.
-- `src/repl.js` provides the interactive shell.
+- `rdbms/` contains the database engine and REPL.
+- `backend/` contains the Express API server.
+- `frontend/` contains the React app.
+
+RDBMS internals:
+
+- `rdbms/parser.js` parses SQL into an AST.
+- `rdbms/engine.js` executes AST nodes against the DB manager.
+- `rdbms/dbManager.js` manages multiple databases and persistence.
+- `rdbms/db.js` implements tables, indexes, constraints, and CRUD.
+- `rdbms/repl.js` provides the interactive shell.
 
 ---
 
