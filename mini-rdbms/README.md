@@ -1,7 +1,10 @@
 # Mini RDBMS (SQL-like REPL)
 
-A small relational database management system implemented from scratch with a SQL-like interface and an interactive REPL.
-It demonstrates core database concepts: parsing, schema enforcement, indexing, and query execution.
+## Overview
+
+A small relational database management system implemented from scratch with a SQL-like interface and an interactive REPL. It demonstrates core database concepts such as parsing, schema enforcement, indexing, and query execution.
+
+This project has three parts: a custom RDBMS with a SQL-like REPL, an Express API that talks directly to the RDBMS, and a React frontend that demonstrates CRUD operations against the API. The goal is to show how a simple database engine can power a simple full stack application.
 
 ---
 
@@ -25,8 +28,6 @@ npm run web
 ```
 
 Server runs on `http://localhost:5000`.
-
----
 
 ## Example REPL session
 
@@ -213,5 +214,3 @@ RDBMS internals:
 ## Acknowledgements
 
 - Portions of development and documentation were assisted by AI tools (ChatGPT and Codex).
-
-
