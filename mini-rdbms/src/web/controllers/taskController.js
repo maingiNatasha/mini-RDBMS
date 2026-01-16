@@ -15,9 +15,13 @@ function listTasks(req, res, next) {
         // Set active database
         useDemo();
 
+        // Retrieve id from parameters
+        const userId = sqlInt(req.params.id);
+
         // Execute query and handle result
-        const result = execute("SELECT * FROM tasks;");
-        const rows = Array.isArray(result) ? result : (result?.rows ?? result);
+        const result = execute(`SELECT * FROM tasks WHERE user_id = ${userId};`);
+        let rows = Array.isArray(result) ? result : (result?.rows ?? result);
+        if (rows === "(0 rows)") rows = [];
 
         res.status(200).json({
             success: true,
@@ -72,7 +76,7 @@ function updateTask(req, res, next) {
         // Set active database
         useDemo();
 
-        // Retrieve id, and field to update
+        // Retrieve id, and fields to update
         const id = sqlInt(req.params.id);
         const updates = [];
 

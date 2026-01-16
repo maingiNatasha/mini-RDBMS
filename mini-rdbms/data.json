@@ -38,8 +38,15 @@
             "email",
             "id"
           ],
-          "nextRowId": 1,
-          "rows": []
+          "nextRowId": 2,
+          "rows": [
+            {
+              "id": 1,
+              "email": "mainginatasha@gmail.com",
+              "password": "password",
+              "_rowId": 1
+            }
+          ]
         },
         "tasks": {
           "name": "tasks",
@@ -73,8 +80,15 @@
           "indexedColumns": [
             "id"
           ],
-          "nextRowId": 1,
-          "rows": []
+          "nextRowId": 4,
+          "rows": [
+            {
+              "id": 1,
+              "user_id": 1,
+              "title": "Deep clean all rooms",
+              "_rowId": 1
+            }
+          ]
         }
       }
     }

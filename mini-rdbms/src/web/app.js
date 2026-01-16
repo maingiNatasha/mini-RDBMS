@@ -9,7 +9,7 @@ app.use(express.json());
 
 // Routes
 app.use("/api/auth", userRoutes);
-app.use("/api/task", taskRoutes);
+app.use("/api", taskRoutes);
 
 // Basic JSON error handler for controllers calling next(err)
 app.use((err, req, res, next) => {

@@ -3,9 +3,9 @@ const { listTasks, createTask, updateTask, deleteTask } = require("../controller
 
 const router = express.Router();
 
-router.get("/", listTasks);
-router.post("/", createTask);
-router.put("/:id", updateTask);
-router.delete("/:id", deleteTask);
+router.get("/user/:id/tasks", listTasks);
+router.post("/task", createTask);
+router.put("/task/:id", updateTask);
+router.delete("/task/:id", deleteTask);
 
 module.exports = router;
