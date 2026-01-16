@@ -38,13 +38,25 @@
             "email",
             "id"
           ],
-          "nextRowId": 2,
+          "nextRowId": 4,
           "rows": [
             {
               "id": 1,
               "email": "mainginatasha@gmail.com",
               "password": "password",
               "_rowId": 1
+            },
+            {
+              "id": 2,
+              "email": "kendy@gmail.com",
+              "password": "pass",
+              "_rowId": 2
+            },
+            {
+              "id": 3,
+              "email": "brian@gmail.com",
+              "password": "brian",
+              "_rowId": 3
             }
           ]
         },
@@ -80,13 +92,37 @@
           "indexedColumns": [
             "id"
           ],
-          "nextRowId": 4,
+          "nextRowId": 9,
           "rows": [
             {
               "id": 1,
               "user_id": 1,
               "title": "Deep clean all rooms",
               "_rowId": 1
+            },
+            {
+              "id": 2,
+              "user_id": 1,
+              "title": "Wash my hair",
+              "_rowId": 4
+            },
+            {
+              "id": 3,
+              "user_id": 1,
+              "title": "Set Resolutions",
+              "_rowId": 5
+            },
+            {
+              "id": 4,
+              "user_id": 1,
+              "title": "Complete the Linux Fundamentals course",
+              "_rowId": 6
+            },
+            {
+              "id": 5,
+              "user_id": 1,
+              "title": "Make some time for hobbies",
+              "_rowId": 7
             }
           ]
         }
